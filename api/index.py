@@ -6,7 +6,6 @@ import shutil
 import asyncio
 import logging
 from flask import Flask, request, jsonify
-from dotenv import load_dotenv
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command, CommandStart
@@ -24,11 +23,9 @@ from aiogram.types import (
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from file_builder import create_word_from_images, create_pdf_from_images
 
-# Hardcoded Token (Serverless uchun xavfsiz va aniq)
 BOT_TOKEN = "8907229755:AAGQP5_Q7TEXEdj5vzPmUJfhK0oACIF1XmU"
 
 app = Flask(__name__)
-bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher()
 
 TEMP_DIR = "/tmp/telegram_bot"
@@ -58,7 +55,6 @@ def get_user_images(user_id: int) -> list[str]:
     user_dir = os.path.join(TEMP_DIR, str(user_id))
     if not os.path.exists(user_dir):
         return []
-    # Barcha rasm fayllarini saralab olish
     files = sorted(glob.glob(os.path.join(user_dir, "img_*")))
     return files
 
@@ -72,7 +68,7 @@ def sanitize_filename(filename: str) -> str:
     clean_name = re.sub(r'[\\/*?:"<>|]', "", filename).strip()
     return clean_name if clean_name else "Hujjat"
 
-# Handlers (Stateless - Vercel Serverless uchun maxsus moslashtirilgan)
+# Handlers
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -95,7 +91,7 @@ async def process_clear(message: types.Message):
     await message.answer("🔄 Barcha yuborilgan rasmlar tozalandi. Yangi rasmlarni yuborishingiz mumkin.", reply_markup=get_main_keyboard())
 
 @dp.message(F.photo)
-async def handle_photo(message: types.Message):
+async def handle_photo(message: types.Message, bot: Bot):
     user_id = message.from_user.id
     user_dir = os.path.join(TEMP_DIR, str(user_id))
     os.makedirs(user_dir, exist_ok=True)
@@ -112,7 +108,7 @@ async def handle_photo(message: types.Message):
     await message.answer(f"✅ Rasm qabul qilindi. Jami: **{len(current_images)}** ta rasm.", parse_mode="Markdown", reply_markup=get_main_keyboard())
 
 @dp.message(F.document)
-async def handle_document_image(message: types.Message):
+async def handle_document_image(message: types.Message, bot: Bot):
     doc = message.document
     mime_type = doc.mime_type or ""
     
@@ -153,7 +149,7 @@ async def process_create_request(message: types.Message):
     )
 
 @dp.callback_query(F.data.startswith("fmt_"))
-async def process_format_choice(callback: types.CallbackQuery):
+async def process_format_choice(callback: types.CallbackQuery, bot: Bot):
     data_parts = callback.data.split(":", 1)
     fmt_choice = data_parts[0].replace("fmt_", "")
     filename = sanitize_filename(data_parts[1]) if len(data_parts) > 1 else "Hujjat"
@@ -162,7 +158,7 @@ async def process_format_choice(callback: types.CallbackQuery):
     images = get_user_images(user_id)
 
     if not images:
-        await callback.message.answer("❌ Rasmlar topilmadi yoki sessiya tugadi. Iltimos, rasmlarni qaytadan yuboring.")
+        await callback.message.answer("❌ Rasmlar topilmadi. Iltimos, rasmlarni qaytadan yuboring.")
         await callback.answer()
         return
 
@@ -196,11 +192,13 @@ async def process_format_choice(callback: types.CallbackQuery):
         await callback.message.answer(f"❌ Fayl yaratishda xatolik yuz berdi: {e}")
     finally:
         clean_user_temp(user_id)
-        await status_msg.delete()
+        try:
+            await status_msg.delete()
+        except Exception:
+            pass
         await callback.message.answer("Yangi fayl yaratish uchun rasmlar yuborishingiz mumkin.", reply_markup=get_main_keyboard())
         await callback.answer()
 
-# Text message handler for custom filename if sent
 @dp.message(F.text)
 async def handle_custom_name(message: types.Message):
     user_id = message.from_user.id
@@ -217,15 +215,25 @@ async def handle_custom_name(message: types.Message):
     else:
         await message.answer("📸 Iltimos, avval rasmlarni yuboring!", reply_markup=get_main_keyboard())
 
-# Flask Webhook Endpoints for Vercel
+# Flask Webhook Handler with safe Bot Lifecycle per request
 @app.route("/", methods=["GET"])
 def home():
     return "Bot Server is Running on Vercel Serverless!"
 
+async def handle_webhook_request(req_data):
+    async with Bot(token=BOT_TOKEN) as bot:
+        update = Update.model_validate(req_data, context={"bot": bot})
+        await dp.feed_update(bot, update)
+
 @app.route("/api/webhook", methods=["POST"])
 def webhook():
-    update = Update.model_validate(request.get_json(force=True), context={"bot": bot})
-    asyncio.run(dp.feed_update(bot, update))
+    try:
+        req_data = request.get_json(force=True)
+        if not req_data:
+            return "OK", 200
+        asyncio.run(handle_webhook_request(req_data))
+    except Exception as e:
+        logging.error(f"Webhook processing error: {e}")
     return "OK", 200
 
 @app.route("/api/set_webhook", methods=["GET"])
@@ -234,7 +242,8 @@ def set_webhook():
     webhook_url = f"{host_url}api/webhook"
     
     async def _set():
-        return await bot.set_webhook(webhook_url)
+        async with Bot(token=BOT_TOKEN) as bot:
+            return await bot.set_webhook(webhook_url)
     
     res = asyncio.run(_set())
     return jsonify({"success": res, "webhook_url": webhook_url})
