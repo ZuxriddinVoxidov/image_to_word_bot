@@ -27,7 +27,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from file_builder import create_word_from_images, create_pdf_from_images
 
 load_dotenv()
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8907229755:AAGQP5_Q7TEXEdj5vzPmUJfhK0oACIF1XmU")
 
 app = Flask(__name__)
 bot = Bot(token=BOT_TOKEN) if BOT_TOKEN else None
