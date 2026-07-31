@@ -234,14 +234,16 @@ async def handle_custom_name(message: types.Message):
 
 # Flask Endpoints
 @app.route("/", methods=["GET"])
-def home():
-    return "Bot Server is Running on Vercel Serverless!"
-
 @app.route("/ping", methods=["GET"])
 @app.route("/api/ping", methods=["GET"])
 def ping():
-    """Keep-Alive Cron endpoint to keep Vercel function warm"""
-    return jsonify({"status": "ok", "warm": True, "bot": "active"}), 200
+    """Keep-Alive Cron & Health-check endpoint to keep Vercel function warm"""
+    return jsonify({
+        "status": "ok",
+        "warm": True,
+        "bot": "active",
+        "message": "Bot Server is Running on Vercel Serverless!"
+    }), 200
 
 async def handle_webhook_request(req_data):
     async with Bot(token=BOT_TOKEN) as bot:
