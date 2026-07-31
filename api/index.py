@@ -105,7 +105,12 @@ async def handle_photo(message: types.Message, bot: Bot):
     await bot.download(photo, destination=file_path)
     current_images = get_user_images(user_id)
 
-    await message.answer(f"✅ Rasm qabul qilindi. Jami: **{len(current_images)}** ta rasm.", parse_mode="Markdown", reply_markup=get_main_keyboard())
+    await message.answer(
+        f"✅ Rasm qabul qilindi. Jami: **{len(current_images)}** ta rasm.\n\n"
+        "Rasmlar tugagan bo'lsa **'📝 Fayl yaratish'** tugmasini bosing.",
+        parse_mode="Markdown",
+        reply_markup=get_main_keyboard()
+    )
 
 @dp.message(F.document)
 async def handle_document_image(message: types.Message, bot: Bot):
@@ -129,7 +134,11 @@ async def handle_document_image(message: types.Message, bot: Bot):
     await bot.download(doc, destination=file_path)
     current_images = get_user_images(user_id)
 
-    await message.answer(f"✅ Fayl rasm sifatida qabul qilindi. Jami: **{len(current_images)}** ta rasm.", parse_mode="Markdown", reply_markup=get_main_keyboard())
+    await message.answer(
+        f"✅ Fayl rasm sifatida qabul qilindi. Jami: **{len(current_images)}** ta rasm.",
+        parse_mode="Markdown",
+        reply_markup=get_main_keyboard()
+    )
 
 @dp.message(F.text.in_({"📝 Fayl yaratish", "📝 Word fayl yaratish"}))
 async def process_create_request(message: types.Message):
@@ -141,9 +150,14 @@ async def process_create_request(message: types.Message):
         return
 
     default_name = f"Hujjat_{len(images)}_rasm"
-    await message.answer(
+    prompt_text = (
         f"📊 Jami **{len(images)}** ta rasm yig'ildi.\n\n"
-        "📌 Qaysi formatda saqlashni xohlaysiz?",
+        "✏️ **Faylingizga maxsus nom berish uchun:**\n"
+        "Shunchaki fayl nomini chatga text shaklida yozib yuboring (masalan: `Mening_Hujjatim`).\n\n"
+        "Yoki standart nom bilan yaratish uchun formatni tanlang:"
+    )
+    await message.answer(
+        prompt_text,
         parse_mode="Markdown",
         reply_markup=get_format_inline_keyboard(default_name)
     )
@@ -207,18 +221,26 @@ async def handle_custom_name(message: types.Message):
     if images:
         custom_name = sanitize_filename(message.text)
         await message.answer(
-            f"📁 Fayl nomi: **{custom_name}**\n\n"
-            "📌 Qaysi formatda saqlashni xohlaysiz?",
+            f"✏️ Faylingiz uchun nom qabul qilindi: **{custom_name}**\n\n"
+            "📌 Endi qaysi formatda saqlashni xohlaysiz?",
             parse_mode="Markdown",
             reply_markup=get_format_inline_keyboard(custom_name)
         )
     else:
-        await message.answer("📸 Iltimos, avval rasmlarni yuboring!", reply_markup=get_main_keyboard())
+        await message.answer(
+            "📸 Iltimos, avval rasmlarni yuboring va keyin fayl nomini yoki yaratish tugmasini bosing!",
+            reply_markup=get_main_keyboard()
+        )
 
-# Flask Webhook Handler with safe Bot Lifecycle per request
+# Flask Endpoints
 @app.route("/", methods=["GET"])
 def home():
     return "Bot Server is Running on Vercel Serverless!"
+
+@app.route("/api/ping", methods=["GET"])
+def ping():
+    """Keep-Alive Cron endpoint to keep Vercel function warm"""
+    return jsonify({"status": "ok", "warm": True, "bot": "active"}), 200
 
 async def handle_webhook_request(req_data):
     async with Bot(token=BOT_TOKEN) as bot:
