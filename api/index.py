@@ -237,6 +237,7 @@ async def handle_custom_name(message: types.Message):
 def home():
     return "Bot Server is Running on Vercel Serverless!"
 
+@app.route("/ping", methods=["GET"])
 @app.route("/api/ping", methods=["GET"])
 def ping():
     """Keep-Alive Cron endpoint to keep Vercel function warm"""
