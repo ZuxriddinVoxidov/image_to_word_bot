@@ -63,6 +63,22 @@ def clean_user_temp(user_id: int):
     if os.path.exists(user_dir):
         shutil.rmtree(user_dir, ignore_errors=True)
 
+def set_waiting_for_name(user_id: int):
+    user_dir = os.path.join(TEMP_DIR, str(user_id))
+    os.makedirs(user_dir, exist_ok=True)
+    marker = os.path.join(user_dir, "WAITING_NAME")
+    with open(marker, "w") as f:
+        f.write("1")
+
+def clear_waiting_for_name(user_id: int):
+    user_dir = os.path.join(TEMP_DIR, str(user_id))
+    marker = os.path.join(user_dir, "WAITING_NAME")
+    if os.path.exists(marker):
+        try:
+            os.remove(marker)
+        except Exception:
+            pass
+
 def sanitize_filename(filename: str) -> str:
     import re
     clean_name = re.sub(r'[\\/*?:"<>|]', "", filename).strip()
@@ -149,17 +165,18 @@ async def process_create_request(message: types.Message):
         await message.answer("⚠️ Hali hech qanday rasm yubormadingiz! Iltimos, avval rasmlarni yuboring.")
         return
 
-    default_name = f"Hujjat_{len(images)}_rasm"
+    # Nom kiritish kutilayotgani belgilanadi
+    set_waiting_for_name(user_id)
+
     prompt_text = (
         f"📊 Jami **{len(images)}** ta rasm yig'ildi.\n\n"
-        "✏️ **Faylingizga maxsus nom berish uchun:**\n"
-        "Shunchaki fayl nomini chatga text shaklida yozib yuboring (masalan: `Mening_Hujjatim`).\n\n"
-        "Yoki standart nom bilan yaratish uchun formatni tanlang:"
+        "✏️ **Ushbu faylni nima deb nomlaymiz?**\n"
+        "Iltimos, fayl nomini matn shaklida yozib yuboring (masalan: `Mening_Hujjatim`):"
     )
     await message.answer(
         prompt_text,
         parse_mode="Markdown",
-        reply_markup=get_format_inline_keyboard(default_name)
+        reply_markup=ReplyKeyboardRemove()
     )
 
 @dp.callback_query(F.data.startswith("fmt_"))
@@ -219,16 +236,17 @@ async def handle_custom_name(message: types.Message):
     images = get_user_images(user_id)
     
     if images:
+        clear_waiting_for_name(user_id)
         custom_name = sanitize_filename(message.text)
         await message.answer(
-            f"✏️ Faylingiz uchun nom qabul qilindi: **{custom_name}**\n\n"
+            f"✏️ Fayl nomi qabul qilindi: **{custom_name}**\n\n"
             "📌 Endi qaysi formatda saqlashni xohlaysiz?",
             parse_mode="Markdown",
             reply_markup=get_format_inline_keyboard(custom_name)
         )
     else:
         await message.answer(
-            "📸 Iltimos, avval rasmlarni yuboring va keyin fayl nomini yoki yaratish tugmasini bosing!",
+            "📸 Iltimos, avval rasmlarni yuboring!",
             reply_markup=get_main_keyboard()
         )
 
